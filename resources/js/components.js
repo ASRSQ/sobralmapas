@@ -1,80 +1,173 @@
 // Função para inicializar a caixa de seleção (mover e redimensionar)
 function initializeSelectionBox() {
     const selectionBox = document.getElementById("selection-box");
+    const selectionArea = document.getElementById("selection-area");
     const dragHandle = document.getElementById("drag-handle");
     const selectionButton = document.getElementById("selection-button");
     const selectionTools = document.querySelector(".selection-tools");
     const resolution = document.getElementById("resolution");
-    const selectionArea = document.getElementById("selection-area");
+    const downloadButton = document.getElementById("download-button");
+    const scaleInput = document.getElementById("scale");
+
     let isDragging = false;
-    let startX, startY, offsetX, offsetY;
+    let isResizing = false;
+    let startX, startY, startWidth, startHeight, offsetX, offsetY;
 
-    // Verifica se os elementos estão presentes
-    if (selectionButton && selectionTools) {
-        selectionButton.addEventListener("click", function () {
-            // Alterna a visibilidade da div "selection-tools"
-            if (
-                selectionTools.style.display === "none" ||
-                selectionTools.style.display === ""
-            ) {
-                selectionButton.classList.add("active");
-                selectionTools.style.display = "block"; // Exibe o selection-tools
-            } else {
-                selectionTools.style.display = "none"; // Oculta o selection-tools
-                selectionButton.classList.remove("active");
-            }
-        });
-    }
+    // ✅ Criar um "handle" para permitir redimensionamento no canto inferior direito
+    const resizeHandle = document.createElement("div");
+    resizeHandle.style.width = "15px";
+    resizeHandle.style.height = "15px";
+    resizeHandle.style.background = "#000";
+    resizeHandle.style.position = "absolute";
+    resizeHandle.style.right = "0";
+    resizeHandle.style.bottom = "0";
+    resizeHandle.style.cursor = "nwse-resize";
+    selectionBox.appendChild(resizeHandle);
 
-    // Função para atualizar as dimensões no cabeçalho
-    function updateDimensions() {
-        const width = selectionArea.offsetWidth;
-        const height = selectionArea.offsetHeight;
-        resolution.innerHTML = `${width} x ${height}`;
-    }
-
-    // Iniciar o arraste ao clicar no cabeçalho
+    // ✅ Permitir arrastar a caixa pelo título azul
     dragHandle.addEventListener("mousedown", function (e) {
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
-
-        // Pega a posição inicial da caixa de seleção
         offsetX = selectionBox.offsetLeft;
         offsetY = selectionBox.offsetTop;
-
-        e.preventDefault(); // Previne seleção de texto
+        e.preventDefault();
     });
 
-    // Mover a caixa durante o arraste
     document.addEventListener("mousemove", function (e) {
         if (isDragging) {
-            const moveX = e.clientX - startX;
-            const moveY = e.clientY - startY;
+            selectionBox.style.left = `${offsetX + (e.clientX - startX)}px`;
+            selectionBox.style.top = `${offsetY + (e.clientY - startY)}px`;
+        }
 
-            // Atualizar a posição da caixa de seleção
-            selectionBox.style.left = offsetX + moveX + "px";
-            selectionBox.style.top = offsetY + moveY + "px";
+        if (isResizing) {
+            let newWidth = startWidth + (e.clientX - startX);
+            let newHeight = startHeight + (e.clientY - startY);
+
+            // 🔥 Garante que o tamanho mínimo seja de 50x50px
+            if (newWidth >= 50 && newHeight >= 50) {
+                selectionArea.style.width = `${newWidth}px`;
+                selectionArea.style.height = `${newHeight}px`;
+                updateDimensions();
+            }
         }
     });
 
-    // Finalizar o arraste ao soltar o mouse
     document.addEventListener("mouseup", function () {
         isDragging = false;
-        updateDimensions(); // Atualiza as dimensões após o movimento
+        isResizing = false;
     });
 
-    // Atualizar as dimensões quando a página carregar
+    // ✅ Permitir redimensionar a caixa de seleção corretamente
+    resizeHandle.addEventListener("mousedown", function (e) {
+        isResizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startWidth = selectionArea.offsetWidth;
+        startHeight = selectionArea.offsetHeight;
+        e.preventDefault();
+    });
+
+    // ✅ Atualizar dimensões na interface
+    function updateDimensions() {
+        resolution.innerHTML = `${selectionArea.offsetWidth} x ${selectionArea.offsetHeight}`;
+    }
+
     updateDimensions();
 
-    // Função que escuta o redimensionamento da caixa
-    const resizeObserver = new ResizeObserver(() => {
-        updateDimensions(); // Atualiza as dimensões após o redimensionamento
-    });
+    // ✅ Corrigir o evento de clique para abrir o menu de impressão
+    if (selectionButton && selectionTools) {
+        selectionButton.addEventListener("click", function () {
+            selectionTools.style.display = selectionTools.style.display === "none" || selectionTools.style.display === ""
+                ? "block"
+                : "none";
+        });
+    }
 
-    // Observar mudanças na caixa de seleção
-    resizeObserver.observe(selectionBox);
+    // ✅ Garantir que o botão de download funcione corretamente
+    if (downloadButton) {
+        downloadButton.addEventListener("click", function () {
+            captureSelectedArea();
+        });
+    }
+
+    function captureSelectedArea() {
+        const mapElement = document.getElementById("map");
+        const format = document.getElementById("format").value;
+        const scale = parseFloat(scaleInput.value) || 8000;
+
+        if (!mapElement || !selectionArea) {
+            console.error("Erro: Elementos do mapa ou seleção não encontrados!");
+            return;
+        }
+
+        // ✅ Força a renderização do OpenLayers antes da captura
+        if (typeof map !== "undefined" && map) {
+            map.updateSize();
+            map.renderSync();
+        }
+
+        html2canvas(mapElement, {
+            useCORS: true,
+            backgroundColor: null,
+            scale: 3, // 🔥 Aumentando a resolução para melhor qualidade
+        }).then((canvasMap) => {
+            const selectionRect = selectionArea.getBoundingClientRect();
+            const mapRect = mapElement.getBoundingClientRect();
+
+            const cropCanvas = document.createElement("canvas");
+            const ctx = cropCanvas.getContext("2d");
+
+            // 🔥 Corrigindo a escala corretamente
+            const scaleFactor = scale / 8000; // Ajuste de escala
+            const cropX = (selectionRect.left - mapRect.left) * 3 * scaleFactor;
+            const cropY = (selectionRect.top - mapRect.top) * 3 * scaleFactor;
+            const cropWidth = selectionRect.width * 3 * scaleFactor;
+            const cropHeight = selectionRect.height * 3 * scaleFactor;
+
+            cropCanvas.width = cropWidth;
+            cropCanvas.height = cropHeight;
+
+            ctx.drawImage(canvasMap, cropX, cropY, cropWidth, cropHeight, 0, 0, cropCanvas.width, cropCanvas.height);
+
+            if (format === "pdf") {
+                generatePDF(cropCanvas);
+            } else {
+                downloadImage(cropCanvas, format);
+            }
+        }).catch((error) => {
+            console.error("Erro ao capturar a área:", error);
+        });
+    }
+
+    function downloadImage(canvas, format) {
+        const imageURL = canvas.toDataURL(`image/${format}`);
+        const link = document.createElement("a");
+        link.href = imageURL;
+        link.download = `Mapa.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function generatePDF(canvas) {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF("landscape", "mm", "a4");
+
+        const imgData = canvas.toDataURL("image/png");
+        const imgWidth = 297;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+        pdf.save("Mapa.pdf");
+    }
 }
+
+
+
+
+
+
 
 // botao flutuante de Medir
 function initializeFloatingButton() {
