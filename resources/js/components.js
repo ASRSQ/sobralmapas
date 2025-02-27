@@ -169,6 +169,8 @@ function initializeSelectionBox() {
 
 
 
+
+
 // botao flutuante de Medir
 function initializeFloatingButton() {
     const floatingButton = document.getElementById("floating-button");
