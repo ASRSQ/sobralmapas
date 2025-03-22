@@ -48,12 +48,10 @@ import { initializeMap } from "./map";
     });
 
     // Garante que o tooltip desapareça quando o mouse sair do botão
-    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(button => {
-        button.addEventListener('mouseleave', function () {
-            var tooltip = bootstrap.Tooltip.getInstance(this);
-            if (tooltip) {
-                tooltip.hide();
-            }
-        });
+    document.getElementById('toggleSidebar').addEventListener('click', function () {
+        var tooltip = bootstrap.Tooltip.getInstance(this);
+        if (tooltip) {
+            tooltip.hide();
+        }
     });
 })();
