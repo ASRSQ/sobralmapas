@@ -7,6 +7,9 @@ function initializeSelectionBox() {
     const selectionTools = document.querySelector(".selection-tools");
     const resolution = document.getElementById("resolution");
     const selectionArea = document.getElementById("selection-area");
+    const downloadButton = document.getElementById('download-button');
+    const scaleInput = document.getElementById('scale');
+
     let isDragging = false;
     let startX, startY, offsetX, offsetY;
 
@@ -75,6 +78,136 @@ function initializeSelectionBox() {
 
     // Observar mudanças na caixa de seleção
     resizeObserver.observe(selectionBox);
+
+    if (downloadButton) {
+        // downloadButton.addEventListener('click', async () => {
+        //     const selectionBox = document.getElementById('selection-area');
+        //     const map = document.querySelector('#map canvas'); // atualizado para OpenLayers
+        
+        //     if (!selectionBox || !map) {
+        //         console.log("Mapa ou área de seleção não encontrados.");
+        //         return;
+        //     }
+        
+        //     const format = document.getElementById('format').value;
+        //     const scale = document.getElementById('scale').value;
+        
+        //     const mapRect = map.getBoundingClientRect();
+        //     const selectionRect = selectionBox.getBoundingClientRect();
+        
+        //     const left = selectionRect.left - mapRect.left;
+        //     const top = selectionRect.top - mapRect.top;
+        //     const width = selectionRect.width;
+        //     const height = selectionRect.height;
+        
+        //     html2canvas(map, {
+        //         useCORS: true,
+        //         scale: 1
+        //     }).then(canvas => {
+        //         const croppedCanvas = document.createElement('canvas');
+        //         croppedCanvas.width = width;
+        //         croppedCanvas.height = height;
+        
+        //         const ctx = croppedCanvas.getContext('2d');
+        //         ctx.drawImage(canvas, left, top, width, height, 0, 0, width, height);
+        
+        //         const imgData = croppedCanvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`);
+        
+        //         if (format === 'pdf') {
+        //             const { jsPDF } = window.jspdf;
+        //             const pdf = new jsPDF({
+        //                 orientation: width > height ? 'landscape' : 'portrait',
+        //                 unit: 'px',
+        //                 format: [width, height]
+        //             });
+        //             pdf.addImage(imgData, 'PNG', 0, 0, width, height);
+        //             pdf.save('mapa_selecionado.pdf');
+        //         } else {
+        //             const link = document.createElement('a');
+        //             link.href = imgData;
+        //             link.download = `mapa_selecionado.${format}`;
+        //             link.click();
+        //         }
+        //     }).catch(err => {
+        //         console.error("Erro ao capturar o mapa:", err);
+        //     });
+        // });
+
+        downloadButton.addEventListener('click', async () => {
+            const selectionArea = document.getElementById('selection-area');
+            const mapCanvas = document.querySelector('#map canvas');
+        
+            if (!selectionArea || !mapCanvas) {
+                console.error("Mapa ou área de seleção não encontrados.");
+                return;
+            }
+        
+            const format = document.getElementById('format').value;
+            const scaleValue = parseFloat(document.getElementById('scale').value);
+        
+            const mapRect = mapCanvas.getBoundingClientRect();
+            const selectionRect = selectionArea.getBoundingClientRect();
+        
+            const left = selectionRect.left - mapRect.left;
+            const top = selectionRect.top - mapRect.top;
+            const width = selectionRect.width;
+            const height = selectionRect.height;
+        
+            const olMap = window.map; // Usa a instância global do mapa
+            const view = olMap.getView();
+            const originalResolution = view.getResolution();
+        
+            // Cálculo da nova resolução
+            const dpi = 96;
+            const newResolution = scaleValue / (dpi * 39.37);
+        
+            // Aplicar nova resolução
+            view.setResolution(newResolution);
+        
+            // Aguardar a renderização
+            setTimeout(() => {
+                html2canvas(mapCanvas, { useCORS: true, scale: 1 }).then(canvas => {
+                    const croppedCanvas = document.createElement('canvas');
+                    croppedCanvas.width = width;
+                    croppedCanvas.height = height;
+        
+                    const ctx = croppedCanvas.getContext('2d');
+                    ctx.drawImage(canvas, left, top, width, height, 0, 0, width, height);
+        
+                    const imgData = croppedCanvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`);
+        
+                    if (format === 'pdf') {
+                        const { jsPDF } = window.jspdf;
+                        const pdf = new jsPDF({
+                            orientation: width > height ? 'landscape' : 'portrait',
+                            unit: 'px',
+                            format: [width, height]
+                        });
+                        pdf.addImage(imgData, 'PNG', 0, 0, width, height);
+                        pdf.save('mapa_selecionado.pdf');
+                    } else {
+                        const link = document.createElement('a');
+                        link.href = imgData;
+                        link.download = `mapa_selecionado.${format}`;
+                        link.click();
+                    }
+        
+                    view.setResolution(originalResolution);
+                }).catch(err => {
+                    console.error("Erro ao capturar o mapa:", err);
+                    view.setResolution(originalResolution);
+                });
+            }, 500); // Pequeno delay para garantir renderização
+        });
+        
+        
+    }
+    
+    if (scaleInput) {
+        const debouncedScaleUpdate = debounce(updateMapFromScaleInput, 400);
+        scaleInput.addEventListener('input', debouncedScaleUpdate);
+    }
+
 }
 
 // botao flutuante de Medir
@@ -632,12 +765,85 @@ function expandCategoryAndSubcategory(layerCheckbox) {
     }
 }
 
+function initializeResolutionWatcher() {
+    const view = window.map.getView();
+    const resolutionElement = document.getElementById('resolution');
+    const scaleInput = document.getElementById('scale');
+
+    if (!view) return;
+
+    const updateUI = () => {
+        const res = view.getResolution();
+        if (resolutionElement) {
+            resolutionElement.innerText = `${Math.round(res * 1000)} x ${Math.round(res * 1000)}`;
+        }
+        if (scaleInput) {
+            scaleInput.value = resolutionToScale(res);
+        }
+    };
+
+    // Atualiza ao carregar e sempre que a resolução mudar
+    updateUI();
+    view.on('change:resolution', updateUI);
+}
+
+const DPI = 96;
+
+// Converte resolução do mapa para escala (ex: 1:10000)
+function resolutionToScale(resolution) {
+    return Math.round(resolution * DPI * 39.37);
+}
+
+// Converte escala para resolução
+function scaleToResolution(scale) {
+    return scale / (DPI * 39.37);
+}
+
+// Atualiza o input #scale com a escala baseada na resolução atual
+function updateScaleInputFromMap() {
+    const view = window.map.getView();
+    const scaleInput = document.getElementById('scale');
+    if (!view || !scaleInput) return;
+
+    const resolution = view.getResolution();
+    const escala = resolutionToScale(resolution);
+    scaleInput.value = escala;
+}
+
+// Altera o zoom do mapa baseado no valor digitado no input de escala
+function updateMapFromScaleInput() {
+    const scaleInput = document.getElementById('scale');
+    const scaleMin = 4514;
+    if (!scaleInput) return;
+
+    let scaleValue = parseFloat(scaleInput.value);
+    if (isNaN(scaleValue)) return;
+    if (scaleValue < scaleMin) {
+        scaleInput.value = scaleMin;
+        scaleValue = scaleMin;
+    }
+
+    const resolution = scaleToResolution(scaleValue);
+    const view = window.map.getView();
+    view.setResolution(resolution);
+}
+
+// retarda a ação input
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
 
 export function InitializeComponents() {
     initializeSelectionBox();
+    initializeResolutionWatcher();
     initializeFloatingButton();
     initializeChat();
     initializeMeasure();
     handleServerResponse();
-   
+    updateScaleInputFromMap(); // Ao carregar, preenche o campo de escala com o zoom atual
 }

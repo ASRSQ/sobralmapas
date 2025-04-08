@@ -30,7 +30,7 @@
 
             <p>A imagem mostrará a camada Padrão em <span id="resolution"></span></p>
 
-            <button class="btn btn-primary">Baixar</button>
+            <button id="download-button" class="btn btn-primary">Baixar</button>
         </div>
     </div>
 </div>
